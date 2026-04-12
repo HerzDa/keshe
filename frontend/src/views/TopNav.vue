@@ -12,6 +12,7 @@
       <el-menu-item index="/dashboard">工作台</el-menu-item>
       <el-menu-item index="/invoice">发票验真</el-menu-item>
       <el-menu-item index="/reimbursement">报销申请</el-menu-item>
+      <el-menu-item index="/budget">项目预算</el-menu-item>
       <el-menu-item index="/history">票据夹</el-menu-item>
       <el-menu-item index="logout">退出登录</el-menu-item>
     </el-menu>

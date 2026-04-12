@@ -6,6 +6,7 @@ from .views import (
     MyReimbursementHistoryView,
     OcrByCodeView,
     ProfileView,
+    ProjectBudgetTemplateView,
     RegisterView,
     ReimbursementDraftOrSubmitView,
     UploadAndVerifyInvoiceView,
@@ -23,4 +24,5 @@ urlpatterns = [
     path('reimbursement/history/', MyReimbursementHistoryView.as_view()),
     path('dashboard/stats/', DashboardStatsView.as_view()),
     path('invoice/success-list/', VerifySuccessInvoiceListView.as_view()),
+    path('budget/template/', ProjectBudgetTemplateView.as_view()),
 ]

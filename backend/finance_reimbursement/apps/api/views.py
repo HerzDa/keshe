@@ -1,6 +1,7 @@
 from decimal import Decimal
 import re
 import hashlib
+from pathlib import Path
 from django.utils import timezone
 from django.contrib.auth.hashers import check_password, make_password
 from rest_framework import status
@@ -338,3 +339,61 @@ class VerifySuccessInvoiceListView(APIView):
         )
         data = InvoiceSerializer(qs, many=True, context={'request': request}).data
         return Response(data)
+
+
+def _parse_budget_template_lines(lines):
+    rows = []
+    current_heading = ''
+    for raw in lines:
+        line = (raw or '').strip()
+        if not line:
+            continue
+
+        if re.match(r'^[一二三四五六七八九十]+、', line):
+            current_heading = line
+            rows.append({
+                'type': 'heading',
+                'category': current_heading,
+                'subject': current_heading,
+                'description': '',
+            })
+            continue
+
+        if line.startswith('科目名称') or line.startswith('表格科目名称'):
+            continue
+
+        parts = [p.strip() for p in re.split(r'\t+|\s{2,}', line) if p.strip()]
+        if not parts:
+            continue
+
+        subject = parts[0]
+        if subject in {'——', '-'}:
+            continue
+
+        description = parts[-1] if len(parts) > 1 else ''
+        rows.append({
+            'type': 'item',
+            'category': current_heading,
+            'subject': subject,
+            'budget': 10000,
+            'used': 0,
+            'available': 10000,
+            'used_percent': 0,
+            'description': '' if description in {'——', '-'} else description,
+        })
+
+    return rows
+
+
+class ProjectBudgetTemplateView(APIView):
+    def get(self, request):
+        base_dir = Path(__file__).resolve().parents[4]
+        template_file = base_dir / '新建 文本文档.txt'
+        if not template_file.exists():
+            return Response({'detail': '预算模板文件不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        with template_file.open('r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        rows = _parse_budget_template_lines(lines)
+        return Response({'rows': rows})
