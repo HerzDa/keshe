@@ -15,6 +15,7 @@ from .serializers import (
     ReimbursementSerializer,
 )
 from .services import BaiduServiceError, ocr_vat_invoice
+from .services import generate_invoice_preview
 from .utils import generate_code_6
 
 
@@ -121,6 +122,25 @@ class ProfileView(APIView):
         })
 
 
+class EmployeeLookupView(APIView):
+    def get(self, request):
+        employee_no = (request.query_params.get('employee_no') or '').strip()
+        if not employee_no:
+            return Response({'detail': '请传入工号'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = Employee.objects.get(employee_no=employee_no)
+        except Employee.DoesNotExist:
+            return Response({'detail': '工号不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({
+            'id': user.id,
+            'employee_no': user.employee_no,
+            'name': user.name,
+            'phone': user.phone,
+        })
+
+
 class UploadAndVerifyInvoiceView(APIView):
     def post(self, request):
         employee_id = request.data.get('employee_id')
@@ -134,6 +154,14 @@ class UploadAndVerifyInvoiceView(APIView):
             return Response({'detail': '请上传发票文件'}, status=status.HTTP_400_BAD_REQUEST)
 
         invoice = Invoice.objects.create(employee=employee, file=upload_file)
+        try:
+            preview_rel = generate_invoice_preview(invoice.file.path, invoice.file.name)
+            invoice.preview_image = preview_rel
+            invoice.save(update_fields=['preview_image'])
+        except BaiduServiceError as exc:
+            invoice.verify_msg = str(exc)
+            invoice.save(update_fields=['verify_msg'])
+
         try:
             ocr_result = ocr_vat_invoice(invoice.file.path)
             words = ocr_result.get('words_result', {})

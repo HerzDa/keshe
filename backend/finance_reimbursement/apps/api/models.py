@@ -38,6 +38,7 @@ class Invoice(models.Model):
     code_6 = models.CharField(max_length=6, unique=True, null=True, blank=True)
     invoice_fingerprint = models.CharField(max_length=128, blank=True, db_index=True)
     file = models.FileField(upload_to=invoice_upload_to)
+    preview_image = models.ImageField(upload_to='previews/%Y%m%d/', null=True, blank=True)
     verify_status = models.CharField(max_length=20, choices=VERIFY_CHOICES, default=VERIFY_PENDING)
     verify_msg = models.CharField(max_length=255, blank=True)
 

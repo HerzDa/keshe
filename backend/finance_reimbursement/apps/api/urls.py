@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
     DashboardStatsView,
+    EmployeeLookupView,
     LoginView,
     MyReimbursementHistoryView,
     OcrByCodeView,
@@ -15,6 +16,7 @@ urlpatterns = [
     path('auth/register/', RegisterView.as_view()),
     path('auth/login/', LoginView.as_view()),
     path('auth/profile/', ProfileView.as_view()),
+    path('auth/employee-by-no/', EmployeeLookupView.as_view()),
     path('invoice/upload-verify/', UploadAndVerifyInvoiceView.as_view()),
     path('invoice/ocr-by-code/', OcrByCodeView.as_view()),
     path('reimbursement/save/', ReimbursementDraftOrSubmitView.as_view()),

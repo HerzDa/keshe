@@ -1,7 +1,14 @@
 import base64
 import os
+import uuid
+from pathlib import Path
 import requests
 from django.conf import settings
+
+try:
+    import fitz  # PyMuPDF
+except Exception:
+    fitz = None
 
 
 class BaiduServiceError(Exception):
@@ -84,3 +91,30 @@ def ocr_vat_invoice(file_path: str) -> dict:
     if 'error_code' in result:
         raise BaiduServiceError(f"OCR失败: {result.get('error_msg')}")
     return result
+
+
+def generate_invoice_preview(file_path: str, stored_name: str) -> str:
+    ext = Path(file_path).suffix.lower()
+
+    if ext in {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}:
+        return stored_name
+
+    if ext == '.pdf':
+        if fitz is None:
+            raise BaiduServiceError('PDF预览生成失败：未安装PyMuPDF')
+
+        doc = fitz.open(file_path)
+        try:
+            page = doc.load_page(0)
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            rel_dir = Path('previews') / Path(stored_name).parent.name
+            abs_dir = Path(settings.MEDIA_ROOT) / rel_dir
+            abs_dir.mkdir(parents=True, exist_ok=True)
+            filename = f"{uuid.uuid4().hex}.png"
+            abs_path = abs_dir / filename
+            pix.save(str(abs_path))
+            return str(rel_dir / filename).replace('\\', '/')
+        finally:
+            doc.close()
+
+    return stored_name

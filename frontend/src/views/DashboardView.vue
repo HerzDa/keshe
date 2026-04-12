@@ -34,6 +34,18 @@
     <el-dialog v-model="successDialogVisible" title="已验真成功发票" width="900px">
       <el-table :data="successInvoices" border stripe v-loading="loadingSuccessInvoices">
         <el-table-column prop="code_6" label="6位编码" width="120" />
+        <el-table-column label="发票原件" width="120">
+          <template #default="scope">
+            <el-image
+              v-if="scope.row.preview_url"
+              :src="scope.row.preview_url"
+              :preview-src-list="[scope.row.preview_url]"
+              fit="cover"
+              style="width: 72px; height: 48px; border-radius: 6px"
+            />
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="invoice_code" label="发票代码" width="150" />
         <el-table-column prop="invoice_num" label="发票号码" min-width="180" />
         <el-table-column prop="invoice_date" label="开票日期" width="120" />

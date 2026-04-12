@@ -41,19 +41,28 @@ class LoginSerializer(serializers.Serializer):
 
 class InvoiceSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
+    preview_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Invoice
         fields = [
             'id', 'employee', 'code_6', 'file', 'file_url', 'verify_status', 'verify_msg',
             'invoice_code', 'invoice_num', 'invoice_date', 'check_code', 'amount', 'tax_amount',
-            'total_amount', 'buyer_name', 'seller_name', 'ocr_result', 'created_at'
+            'total_amount', 'buyer_name', 'seller_name', 'preview_url', 'ocr_result', 'created_at'
         ]
         read_only_fields = ['id', 'employee', 'code_6', 'verify_status', 'verify_msg', 'ocr_result', 'created_at']
 
     def get_file_url(self, obj):
         req = self.context.get('request')
         return req.build_absolute_uri(obj.file.url) if req else obj.file.url
+
+    def get_preview_url(self, obj):
+        req = self.context.get('request')
+        if obj.preview_image:
+            return req.build_absolute_uri(obj.preview_image.url) if req else obj.preview_image.url
+        if obj.file:
+            return req.build_absolute_uri(obj.file.url) if req else obj.file.url
+        return ''
 
 
 class ReimbursementSerializer(serializers.ModelSerializer):
