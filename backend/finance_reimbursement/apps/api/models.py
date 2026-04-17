@@ -7,6 +7,7 @@ from django.utils import timezone
 class Employee(models.Model):
     employee_no = models.CharField(max_length=20, unique=True)
     name = models.CharField(max_length=50)
+    department = models.CharField(max_length=20, default='行政部')
     phone = models.CharField(max_length=20, blank=True)
     password = models.CharField(max_length=128)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -82,3 +83,30 @@ class Reimbursement(models.Model):
 
     class Meta:
         db_table = 'reimbursement'
+
+
+class TemporaryLoanApplication(models.Model):
+    STATUS_DRAFT = 'draft'
+    STATUS_SUBMITTED = 'submitted'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, '草稿'),
+        (STATUS_SUBMITTED, '已提交'),
+    ]
+
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='loan_applications')
+    applicant_name = models.CharField(max_length=50)
+    phone = models.CharField(max_length=20, blank=True)
+    summary = models.CharField(max_length=255)
+    project_name = models.CharField(max_length=120)
+    budget_item = models.CharField(max_length=120)
+    usage_detail = models.TextField()
+    loan_type = models.CharField(max_length=50, default='借款')
+    loan_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    expected_repay_date = models.DateField(null=True, blank=True)
+    description = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'temporary_loan_application'

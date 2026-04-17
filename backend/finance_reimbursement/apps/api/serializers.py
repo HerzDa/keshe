@@ -1,14 +1,14 @@
 from decimal import Decimal
 from django.contrib.auth.hashers import check_password, make_password
 from rest_framework import serializers
-from .models import Employee, Invoice, Reimbursement
+from .models import Employee, Invoice, Reimbursement, TemporaryLoanApplication
 from .utils import amount_to_chinese_upper
 
 
 class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
-        fields = ['employee_no', 'name', 'phone', 'password']
+        fields = ['employee_no', 'name', 'department', 'phone', 'password']
 
     def validate_employee_no(self, value):
         if Employee.objects.filter(employee_no=value).exists():
@@ -116,3 +116,16 @@ class ReimbursementSerializer(serializers.ModelSerializer):
         if 'amount' in validated_data:
             validated_data['amount_upper'] = amount_to_chinese_upper(validated_data['amount'])
         return super().update(instance, validated_data)
+
+
+class TemporaryLoanApplicationSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.name', read_only=True)
+
+    class Meta:
+        model = TemporaryLoanApplication
+        fields = [
+            'id', 'employee_name', 'applicant_name', 'phone', 'summary', 'project_name', 'budget_item',
+            'usage_detail', 'loan_type', 'loan_amount', 'expected_repay_date', 'description',
+            'status', 'submitted_at', 'created_at'
+        ]
+        read_only_fields = ['id', 'employee_name', 'submitted_at', 'created_at']

@@ -2,22 +2,26 @@ from decimal import Decimal
 import re
 import hashlib
 from pathlib import Path
+from django.db.models import Sum
 from django.utils import timezone
 from django.contrib.auth.hashers import check_password, make_password
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Employee, Invoice, Reimbursement
+from .models import Employee, Invoice, Reimbursement, TemporaryLoanApplication
 from .serializers import (
     InvoiceSerializer,
     LoginSerializer,
     RegisterSerializer,
     ReimbursementSerializer,
+    TemporaryLoanApplicationSerializer,
 )
 from .services import BaiduServiceError, ocr_vat_invoice
 from .services import generate_invoice_preview
 from .utils import generate_code_6
+
+DEPARTMENT_OPTIONS = ['行政部', '人事部', '财务部', '市场部', '销售部', '产品部', '技术部']
 
 
 def _pick_words(words: dict, *keys) -> str:
@@ -70,7 +74,12 @@ class LoginView(APIView):
         user = serializer.validated_data['user']
         return Response({
             'message': '登录成功',
-            'user': {'id': user.id, 'employee_no': user.employee_no, 'name': user.name},
+            'user': {
+                'id': user.id,
+                'employee_no': user.employee_no,
+                'name': user.name,
+                'department': user.department,
+            },
         })
 
 
@@ -86,6 +95,7 @@ class ProfileView(APIView):
             'id': user.id,
             'employee_no': user.employee_no,
             'name': user.name,
+            'department': user.department,
             'phone': user.phone,
         })
 
@@ -97,6 +107,7 @@ class ProfileView(APIView):
             return Response({'detail': '员工不存在'}, status=status.HTTP_404_NOT_FOUND)
 
         name = (request.data.get('name') or user.name).strip()
+        department = (request.data.get('department') or user.department).strip()
         phone = (request.data.get('phone') or user.phone).strip()
         old_password = request.data.get('old_password') or ''
         new_password = request.data.get('new_password') or ''
@@ -104,7 +115,11 @@ class ProfileView(APIView):
         if not name:
             return Response({'detail': '姓名不能为空'}, status=status.HTTP_400_BAD_REQUEST)
 
+        if department not in DEPARTMENT_OPTIONS:
+            return Response({'detail': '部门不在可选范围内'}, status=status.HTTP_400_BAD_REQUEST)
+
         user.name = name
+        user.department = department
         user.phone = phone
 
         if old_password or new_password:
@@ -119,7 +134,13 @@ class ProfileView(APIView):
         user.save()
         return Response({
             'message': '个人信息更新成功',
-            'user': {'id': user.id, 'employee_no': user.employee_no, 'name': user.name, 'phone': user.phone},
+            'user': {
+                'id': user.id,
+                'employee_no': user.employee_no,
+                'name': user.name,
+                'department': user.department,
+                'phone': user.phone,
+            },
         })
 
 
@@ -138,6 +159,7 @@ class EmployeeLookupView(APIView):
             'id': user.id,
             'employee_no': user.employee_no,
             'name': user.name,
+            'department': user.department,
             'phone': user.phone,
         })
 
@@ -302,6 +324,36 @@ class ReimbursementDraftOrSubmitView(APIView):
         return Response(ReimbursementSerializer(reimbursement).data)
 
 
+class TemporaryLoanDraftOrSubmitView(APIView):
+    def post(self, request):
+        employee_id = request.data.get('employee_id')
+        action = request.data.get('action', 'draft')
+        try:
+            employee = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'detail': '员工不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        payload = {
+            'applicant_name': request.data.get('applicant_name') or employee.name,
+            'phone': request.data.get('phone') or employee.phone,
+            'summary': request.data.get('summary') or request.data.get('reason') or '',
+            'project_name': request.data.get('project_name') or '',
+            'budget_item': request.data.get('budget_item') or '',
+            'usage_detail': request.data.get('usage_detail') or '',
+            'loan_type': request.data.get('loan_type') or '借款',
+            'loan_amount': request.data.get('loan_amount') or request.data.get('amount') or '0',
+            'expected_repay_date': request.data.get('expected_repay_date'),
+            'description': request.data.get('description') or request.data.get('remark') or '',
+            'status': TemporaryLoanApplication.STATUS_SUBMITTED if action == 'submit' else TemporaryLoanApplication.STATUS_DRAFT,
+            'submitted_at': timezone.now() if action == 'submit' else None,
+        }
+
+        serializer = TemporaryLoanApplicationSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        loan = serializer.save(employee=employee)
+        return Response(TemporaryLoanApplicationSerializer(loan).data)
+
+
 class MyReimbursementHistoryView(APIView):
     def get(self, request):
         employee_id = request.query_params.get('employee_id')
@@ -397,3 +449,56 @@ class ProjectBudgetTemplateView(APIView):
 
         rows = _parse_budget_template_lines(lines)
         return Response({'rows': rows})
+
+
+class ReimbursementStatisticsView(APIView):
+    def get(self, request):
+        employee_id = request.query_params.get('employee_id')
+
+        personal_categories = [
+            '硬件费', '材料费', '燃料动力费', '测试化验加工费', '外协费',
+            '软件费', '差旅费（培训相关）', '其他硬件相关及杂项', '业务接待费/工作餐费',
+        ]
+
+        total_personal = (
+            Reimbursement.objects.filter(employee_id=employee_id, status=Reimbursement.STATUS_SUBMITTED)
+            .aggregate(total=Sum('amount'))
+            .get('total')
+            or Decimal('0')
+        )
+
+        weights = [20, 14, 10, 9, 12, 11, 8, 9, 7]
+        personal_values = []
+        if total_personal > 0:
+            remaining = Decimal(total_personal)
+            for i, w in enumerate(weights):
+                if i == len(weights) - 1:
+                    amount = remaining
+                else:
+                    amount = (Decimal(total_personal) * Decimal(w) / Decimal(100)).quantize(Decimal('0.01'))
+                    remaining -= amount
+                personal_values.append(float(amount))
+        else:
+            personal_values = [0.0 for _ in personal_categories]
+
+        department_map = {k: 0.0 for k in DEPARTMENT_OPTIONS}
+        dept_rows = (
+            Reimbursement.objects.filter(status=Reimbursement.STATUS_SUBMITTED)
+            .values('department')
+            .annotate(total=Sum('amount'))
+        )
+        for row in dept_rows:
+            dept_name = row['department'] or ''
+            if dept_name in department_map:
+                department_map[dept_name] = float(row['total'] or 0)
+
+        return Response({
+            'personal': {
+                'labels': personal_categories,
+                'values': personal_values,
+            },
+            'department': {
+                'labels': list(department_map.keys()),
+                'values': list(department_map.values()),
+            },
+        })

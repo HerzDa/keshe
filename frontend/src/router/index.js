@@ -5,6 +5,7 @@ import InvoiceView from '../views/InvoiceView.vue'
 import ReimbursementView from '../views/ReimbursementView.vue'
 import HistoryView from '../views/HistoryView.vue'
 import BudgetView from '../views/BudgetView.vue'
+import StatisticsView from '../views/StatisticsView.vue'
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -13,7 +14,8 @@ const routes = [
   { path: '/invoice', component: InvoiceView },
   { path: '/reimbursement', component: ReimbursementView },
   { path: '/history', component: HistoryView },
-  { path: '/budget', component: BudgetView }
+  { path: '/budget', component: BudgetView },
+  { path: '/statistics', component: StatisticsView }
 ]
 
 const router = createRouter({

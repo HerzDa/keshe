@@ -14,6 +14,7 @@
       <el-menu-item index="/reimbursement">报销申请</el-menu-item>
       <el-menu-item index="/budget">项目预算</el-menu-item>
       <el-menu-item index="/history">票据夹</el-menu-item>
+      <el-menu-item index="/statistics">报销统计</el-menu-item>
       <el-menu-item index="logout">退出登录</el-menu-item>
     </el-menu>
 
@@ -32,6 +33,11 @@
         </el-form-item>
         <el-form-item label="姓名">
           <el-input v-model="profileForm.name" />
+        </el-form-item>
+        <el-form-item label="部门">
+          <el-select v-model="profileForm.department" placeholder="请选择部门" style="width: 100%">
+            <el-option v-for="item in departmentOptions" :key="item" :label="item" :value="item" />
+          </el-select>
         </el-form-item>
         <el-form-item label="电话">
           <el-input v-model="profileForm.phone" />
@@ -65,10 +71,12 @@ const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
 const initials = computed(() => (user.value.name || '员').slice(0, 1))
 const profileDialogVisible = ref(false)
 const saving = ref(false)
+const departmentOptions = ['行政部', '人事部', '财务部', '市场部', '销售部', '产品部', '技术部']
 const profileForm = ref({
   employee_id: '',
   employee_no: '',
   name: '',
+  department: '行政部',
   phone: '',
   old_password: '',
   new_password: '',
@@ -90,6 +98,7 @@ const openProfileDialog = async () => {
   profileForm.value.employee_id = data.id
   profileForm.value.employee_no = data.employee_no
   profileForm.value.name = data.name
+  profileForm.value.department = data.department || '行政部'
   profileForm.value.phone = data.phone
   profileForm.value.old_password = ''
   profileForm.value.new_password = ''
@@ -101,6 +110,7 @@ const saveProfile = async () => {
     const payload = {
       employee_id: profileForm.value.employee_id,
       name: profileForm.value.name,
+      department: profileForm.value.department,
       phone: profileForm.value.phone,
       old_password: profileForm.value.old_password,
       new_password: profileForm.value.new_password,

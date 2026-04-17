@@ -7,8 +7,10 @@ from .views import (
     OcrByCodeView,
     ProfileView,
     ProjectBudgetTemplateView,
+    ReimbursementStatisticsView,
     RegisterView,
     ReimbursementDraftOrSubmitView,
+    TemporaryLoanDraftOrSubmitView,
     UploadAndVerifyInvoiceView,
     VerifySuccessInvoiceListView,
 )
@@ -21,8 +23,10 @@ urlpatterns = [
     path('invoice/upload-verify/', UploadAndVerifyInvoiceView.as_view()),
     path('invoice/ocr-by-code/', OcrByCodeView.as_view()),
     path('reimbursement/save/', ReimbursementDraftOrSubmitView.as_view()),
+    path('loan/save/', TemporaryLoanDraftOrSubmitView.as_view()),
     path('reimbursement/history/', MyReimbursementHistoryView.as_view()),
     path('dashboard/stats/', DashboardStatsView.as_view()),
     path('invoice/success-list/', VerifySuccessInvoiceListView.as_view()),
     path('budget/template/', ProjectBudgetTemplateView.as_view()),
+    path('stats/reimbursement/', ReimbursementStatisticsView.as_view()),
 ]
