@@ -20,7 +20,6 @@
             <el-radio label="酬金申报物业">酬金申报物业</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="单项目报销"><el-input v-model="form.project_no" placeholder="请输入项目编号" /></el-form-item>
         <el-form-item label="项目负责人"><el-input v-model="form.project_manager" placeholder="请输入项目负责人" /></el-form-item>
         <el-form-item label="申请人工号"><el-input v-model="form.employee_no" readonly /></el-form-item>
         <el-form-item label="申请人姓名"><el-input v-model="form.applicant_name" readonly /></el-form-item>
@@ -106,6 +105,11 @@
         </template>
 
         <el-form-item label="摘要" class="full-row" v-if="!isNoInvoiceBusiness"><el-input v-model="form.reason" placeholder="请输入摘要" /></el-form-item>
+        <el-form-item label="相关预算项" class="full-row" v-if="!isNoInvoiceBusiness">
+          <el-select v-model="form.budget_item" filterable style="width: 100%" placeholder="请选择项目预算项">
+            <el-option v-for="item in budgetItemOptions" :key="item" :label="item" :value="item" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="报销部门"><el-input v-model="form.department" /></el-form-item>
         <el-form-item label="报销日期"><el-date-picker v-model="form.reimbursement_date" type="date" value-format="YYYY-MM-DD" /></el-form-item>
         <el-form-item :label="isDomesticTravel ? '金额(自动合计)' : '金额'" v-if="!isLoanBusiness"><el-input v-model="form.amount" :readonly="isDomesticTravel" /></el-form-item>
@@ -170,7 +174,6 @@ const provinceCityOptions = buildProvinceCityOptions()
 
 const form = ref({
   code_6: invoice.value.code_6 || '',
-  project_no: '',
   project_manager: '',
   employee_no: user.employee_no || '',
   applicant_name: user.name || '',
@@ -289,6 +292,10 @@ const save = async (action) => {
   }
   if (!isNoInvoiceBusiness.value && !form.value.code_6) {
     ElMessage.error('请选择已认证发票')
+    return
+  }
+  if (!form.value.budget_item) {
+    ElMessage.error('请选择相关预算项')
     return
   }
   let api = '/reimbursement/save/'

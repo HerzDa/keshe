@@ -22,6 +22,7 @@
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
+import { ElMessage } from 'element-plus'
 import TopNav from './TopNav.vue'
 import request from '../api/request'
 
@@ -86,10 +87,14 @@ const renderCharts = () => {
 }
 
 const loadStats = async () => {
-  const { data } = await request.get('/stats/reimbursement/', { params: { employee_id: user.id } })
-  rawStats.value = data
-  await nextTick()
-  renderCharts()
+  try {
+    const { data } = await request.get('/stats/reimbursement/', { params: { employee_id: user.id } })
+    rawStats.value = data
+    await nextTick()
+    renderCharts()
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.detail || '统计数据加载失败，请稍后重试')
+  }
 }
 
 watch(mode, () => {

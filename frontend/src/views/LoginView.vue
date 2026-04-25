@@ -1,13 +1,8 @@
 <template>
   <div class="login-wrap">
     <div class="login-shell">
-      <section class="hero">
-        <h1>自动化您的费用报销流程</h1>
-        <p>基于OCR识别与规则校验，打造更轻量、更规范的企业报销体验。</p>
-        <div class="hero-card">SME</div>
-      </section>
-
       <section class="panel">
+        <h1 class="platform-title">企业智能财务报销平台</h1>
         <h2>欢迎回来</h2>
         <p class="sub">请输入账号信息继续登录</p>
         <el-tabs v-model="tab">
@@ -84,7 +79,7 @@ const handleLogin = async () => {
     const { data } = await request.post('/auth/login/', payload)
     localStorage.setItem('user', JSON.stringify(data.user))
     ElMessage.success('登录成功')
-    router.push('/dashboard')
+    router.push(data.user?.role === 'accountant' ? '/accountant' : '/dashboard')
   } catch (error) {
     const data = error?.response?.data
     const msg = data?.non_field_errors?.[0] || data?.detail || '登录失败，请检查工号或密码'
@@ -98,68 +93,51 @@ const handleLogin = async () => {
   height: 100vh;
   padding: 30px;
   box-sizing: border-box;
-  background: linear-gradient(160deg, #e8f2ff 0%, #f8fafc 45%, #eef3fb 100%);
+  background:
+    linear-gradient(rgba(8, 20, 52, 0.35), rgba(8, 20, 52, 0.35)),
+    url('/背景.jpg') center center / cover no-repeat;
 }
 
 .login-shell {
-  max-width: 980px;
+  max-width: 520px;
   margin: 0 auto;
   height: 100%;
-  display: grid;
-  grid-template-columns: 1fr 1.15fr;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 20px;
   overflow: hidden;
-  border: 1px solid #d8e1ed;
-  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
-}
-
-.hero {
-  padding: 54px 46px;
-  background: linear-gradient(160deg, #dce9fb, #cbdff9);
-  color: #0f172a;
-}
-
-.hero h1 {
-  margin: 0;
-  font-size: 46px;
-  line-height: 1.12;
-  color: #1672e6;
-}
-
-.hero p {
-  margin-top: 16px;
-  max-width: 360px;
-  line-height: 1.7;
-}
-
-.hero-card {
-  margin-top: 34px;
-  width: 180px;
-  height: 180px;
-  border-radius: 24px;
-  background: rgba(15, 23, 42, 0.08);
-  display: grid;
-  place-items: center;
-  font-size: 44px;
-  font-weight: 800;
-  letter-spacing: 3px;
-  color: #fff;
+  border: none;
+  box-shadow: none;
 }
 
 .panel {
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(4px);
   padding: 42px 44px;
+  width: 100%;
+  border-radius: 18px;
+}
+
+.platform-title {
+  margin: 0 0 12px;
+  color: #0b63ce;
+  font-size: 42px;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .panel h2 {
   margin: 8px 0 6px;
   color: #0f172a;
-  font-size: 38px;
+  font-size: 34px;
+  text-align: center;
 }
 
 .sub {
   color: #64748b;
   margin: 0 0 14px;
+  text-align: center;
 }
 
 .btn-block {
@@ -172,26 +150,12 @@ const handleLogin = async () => {
     padding: 12px;
   }
 
-  .login-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .hero {
-    padding: 24px;
-  }
-
-  .hero h1 {
-    font-size: 34px;
-  }
-
-  .hero-card {
-    width: 120px;
-    height: 120px;
-    font-size: 30px;
-  }
-
   .panel {
     padding: 24px;
+  }
+
+  .platform-title {
+    font-size: 32px;
   }
 }
 </style>

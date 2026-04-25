@@ -4,17 +4,18 @@
       <div class="brand-mark">E</div>
       <div class="brand-text">
         <h1>智汇报销</h1>
-        <p>员工端</p>
+        <p>{{ isAccountant ? '会计端' : '员工端' }}</p>
       </div>
     </div>
 
     <el-menu class="menu" :default-active="active" @select="go">
-      <el-menu-item index="/dashboard">工作台</el-menu-item>
-      <el-menu-item index="/invoice">发票验真</el-menu-item>
-      <el-menu-item index="/reimbursement">报销申请</el-menu-item>
-      <el-menu-item index="/budget">项目预算</el-menu-item>
-      <el-menu-item index="/history">票据夹</el-menu-item>
-      <el-menu-item index="/statistics">报销统计</el-menu-item>
+      <el-menu-item index="/dashboard" v-if="!isAccountant">工作台</el-menu-item>
+      <el-menu-item index="/invoice" v-if="!isAccountant">发票验真</el-menu-item>
+      <el-menu-item index="/reimbursement" v-if="!isAccountant">报销申请</el-menu-item>
+      <el-menu-item index="/budget" v-if="!isAccountant">项目预算</el-menu-item>
+      <el-menu-item index="/history" v-if="!isAccountant">票据夹</el-menu-item>
+      <el-menu-item index="/statistics" v-if="!isAccountant">报销统计</el-menu-item>
+      <el-menu-item index="/accountant" v-if="isAccountant">审批中心</el-menu-item>
       <el-menu-item index="logout">退出登录</el-menu-item>
     </el-menu>
 
@@ -68,6 +69,7 @@ const router = useRouter()
 const route = useRoute()
 const active = computed(() => route.path)
 const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
+const isAccountant = computed(() => user.value.role === 'accountant')
 const initials = computed(() => (user.value.name || '员').slice(0, 1))
 const profileDialogVisible = ref(false)
 const saving = ref(false)
