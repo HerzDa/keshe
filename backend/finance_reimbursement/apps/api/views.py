@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Employee, Invoice, Reimbursement, TemporaryLoanApplication
+from .models import BudgetQuota, Employee, Invoice, Reimbursement, TemporaryLoanApplication
 from .serializers import (
     InvoiceSerializer,
     LoginSerializer,
@@ -19,9 +19,40 @@ from .serializers import (
 )
 from .services import BaiduServiceError, ocr_vat_invoice
 from .services import generate_invoice_preview
-from .utils import generate_code_6
+from .utils import amount_to_chinese_upper, generate_code_6
 
 DEPARTMENT_OPTIONS = ['行政部', '人事部', '财务部', '市场部', '销售部', '产品部', '技术部']
+
+
+def _ensure_budget_quota(item_name: str) -> BudgetQuota:
+    clean_name = (item_name or '').strip()
+    if not clean_name:
+        raise ValueError('相关预算项不能为空')
+    quota, _ = BudgetQuota.objects.get_or_create(item_name=clean_name)
+    return quota
+
+
+def _deduct_budget(item_name: str, amount: Decimal):
+    if amount <= 0:
+        return
+    quota = _ensure_budget_quota(item_name)
+    available = quota.total_amount - quota.used_amount
+    if available < amount:
+        raise ValueError(f'预算不足：{item_name} 可用{available}，本次申请{amount}')
+    quota.used_amount = quota.used_amount + amount
+    quota.save(update_fields=['used_amount', 'updated_at'])
+
+
+def _refund_budget(item_name: str, amount: Decimal):
+    if amount <= 0:
+        return
+    quota = _ensure_budget_quota(item_name)
+    quota.used_amount = max(Decimal('0'), quota.used_amount - amount)
+    quota.save(update_fields=['used_amount', 'updated_at'])
+
+
+def _is_accountant(employee: Employee) -> bool:
+    return employee.role == Employee.ROLE_ACCOUNTANT
 
 
 def _pick_words(words: dict, *keys) -> str:
@@ -79,6 +110,7 @@ class LoginView(APIView):
                 'employee_no': user.employee_no,
                 'name': user.name,
                 'department': user.department,
+                'role': user.role,
             },
         })
 
@@ -96,6 +128,7 @@ class ProfileView(APIView):
             'employee_no': user.employee_no,
             'name': user.name,
             'department': user.department,
+            'role': user.role,
             'phone': user.phone,
         })
 
@@ -160,6 +193,7 @@ class EmployeeLookupView(APIView):
             'employee_no': user.employee_no,
             'name': user.name,
             'department': user.department,
+            'role': user.role,
             'phone': user.phone,
         })
 
@@ -317,6 +351,15 @@ class ReimbursementDraftOrSubmitView(APIView):
         if hasattr(invoice, 'reimbursement'):
             return Response({'detail': '该发票已生成报销单，不可重复提交'}, status=status.HTTP_400_BAD_REQUEST)
 
+        if action == 'submit':
+            try:
+                _deduct_budget(
+                    serializer.validated_data.get('budget_item', ''),
+                    Decimal(serializer.validated_data.get('amount') or '0')
+                )
+            except ValueError as exc:
+                return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
         reimbursement = serializer.save(
             status=Reimbursement.STATUS_SUBMITTED if action == 'submit' else Reimbursement.STATUS_DRAFT,
             submitted_at=timezone.now() if action == 'submit' else None,
@@ -350,6 +393,16 @@ class TemporaryLoanDraftOrSubmitView(APIView):
 
         serializer = TemporaryLoanApplicationSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
+
+        if action == 'submit':
+            try:
+                _deduct_budget(
+                    payload.get('budget_item', ''),
+                    Decimal(payload.get('loan_amount') or '0')
+                )
+            except ValueError as exc:
+                return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
         loan = serializer.save(employee=employee)
         return Response(TemporaryLoanApplicationSerializer(loan).data)
 
@@ -363,6 +416,164 @@ class MyReimbursementHistoryView(APIView):
             qs = qs.filter(status=status_filter)
         data = ReimbursementSerializer(qs, many=True).data
         return Response(data)
+
+
+class ReimbursementEditDeleteRevokeView(APIView):
+    def put(self, request, reimbursement_id):
+        employee_id = request.data.get('employee_id')
+        try:
+            reimbursement = Reimbursement.objects.get(id=reimbursement_id, employee_id=employee_id)
+        except Reimbursement.DoesNotExist:
+            return Response({'detail': '报销单不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        if reimbursement.status not in [Reimbursement.STATUS_DRAFT, Reimbursement.STATUS_REJECTED]:
+            return Response({'detail': '仅草稿或已拒绝可修改'}, status=status.HTTP_400_BAD_REQUEST)
+
+        reimbursement.department = request.data.get('department', reimbursement.department)
+        reimbursement.reason = request.data.get('reason', reimbursement.reason)
+        reimbursement.budget_item = request.data.get('budget_item', reimbursement.budget_item)
+        reimbursement.expense_type = request.data.get('expense_type', reimbursement.expense_type)
+        reimbursement.reimbursement_date = request.data.get('reimbursement_date', reimbursement.reimbursement_date)
+        reimbursement.remark = request.data.get('remark', reimbursement.remark)
+        if reimbursement.status == Reimbursement.STATUS_REJECTED:
+            reimbursement.accountant_reply = ''
+
+        amount = request.data.get('amount')
+        if amount not in (None, ''):
+            reimbursement.amount = Decimal(str(amount))
+            reimbursement.amount_upper = amount_to_chinese_upper(reimbursement.amount)
+
+        reimbursement.save()
+        return Response(ReimbursementSerializer(reimbursement).data)
+
+    def delete(self, request, reimbursement_id):
+        employee_id = request.query_params.get('employee_id')
+        try:
+            reimbursement = Reimbursement.objects.get(id=reimbursement_id, employee_id=employee_id)
+        except Reimbursement.DoesNotExist:
+            return Response({'detail': '报销单不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        if reimbursement.status not in [Reimbursement.STATUS_DRAFT, Reimbursement.STATUS_REJECTED]:
+            return Response({'detail': '仅草稿或已拒绝可删除'}, status=status.HTTP_400_BAD_REQUEST)
+
+        reimbursement.delete()
+        return Response({'message': '删除成功'})
+
+    def post(self, request, reimbursement_id):
+        employee_id = request.data.get('employee_id')
+        action = request.data.get('action', 'revoke')
+        try:
+            reimbursement = Reimbursement.objects.get(id=reimbursement_id, employee_id=employee_id)
+        except Reimbursement.DoesNotExist:
+            return Response({'detail': '报销单不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        if action == 'revoke':
+            if reimbursement.status not in [Reimbursement.STATUS_SUBMITTED, Reimbursement.STATUS_REJECTED]:
+                return Response({'detail': '仅已提交或已拒绝票据可撤销'}, status=status.HTTP_400_BAD_REQUEST)
+
+            if reimbursement.status == Reimbursement.STATUS_SUBMITTED:
+                _refund_budget(reimbursement.budget_item, Decimal(reimbursement.amount or '0'))
+            reimbursement.status = Reimbursement.STATUS_DRAFT
+            reimbursement.submitted_at = None
+            reimbursement.accountant_reply = ''
+            reimbursement.save(update_fields=['status', 'submitted_at', 'accountant_reply'])
+            return Response({'message': '撤销成功，已恢复为草稿'})
+
+        if action == 'submit':
+            if reimbursement.status not in [Reimbursement.STATUS_DRAFT, Reimbursement.STATUS_REJECTED]:
+                return Response({'detail': '仅草稿或已拒绝可提交'}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                _deduct_budget(reimbursement.budget_item, Decimal(reimbursement.amount or '0'))
+            except ValueError as exc:
+                return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+            reimbursement.status = Reimbursement.STATUS_SUBMITTED
+            reimbursement.submitted_at = timezone.now()
+            reimbursement.accountant_reply = ''
+            reimbursement.save(update_fields=['status', 'submitted_at', 'accountant_reply'])
+            return Response({'message': '提交成功'})
+
+        return Response({'detail': 'action仅支持 submit/revoke'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AccountantReimbursementPendingListView(APIView):
+    def get(self, request):
+        employee_id = request.query_params.get('employee_id')
+        try:
+            user = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'detail': '员工不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not _is_accountant(user):
+            return Response({'detail': '仅会计员可访问'}, status=status.HTTP_403_FORBIDDEN)
+
+        qs = Reimbursement.objects.filter(status=Reimbursement.STATUS_SUBMITTED).order_by('-created_at')
+        data = ReimbursementSerializer(qs, many=True, context={'request': request}).data
+        return Response(data)
+
+
+class AccountantReimbursementHistoryListView(APIView):
+    def get(self, request):
+        employee_id = request.query_params.get('employee_id')
+        try:
+            user = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'detail': '员工不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not _is_accountant(user):
+            return Response({'detail': '仅会计员可访问'}, status=status.HTTP_403_FORBIDDEN)
+
+        qs = Reimbursement.objects.filter(status__in=[Reimbursement.STATUS_APPROVED, Reimbursement.STATUS_REJECTED]).order_by('-created_at')
+        data = ReimbursementSerializer(qs, many=True, context={'request': request}).data
+        return Response(data)
+
+
+class AccountantReimbursementAuditView(APIView):
+    def post(self, request, reimbursement_id):
+        employee_id = request.data.get('employee_id')
+        action = request.data.get('action')
+        try:
+            user = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({'detail': '员工不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not _is_accountant(user):
+            return Response({'detail': '仅会计员可审批'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            reimbursement = Reimbursement.objects.get(id=reimbursement_id)
+        except Reimbursement.DoesNotExist:
+            return Response({'detail': '报销单不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        if reimbursement.status != Reimbursement.STATUS_SUBMITTED:
+            return Response({'detail': '当前状态不可审批'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if action == 'approve':
+            reimbursement.status = Reimbursement.STATUS_APPROVED
+            reimbursement.accountant_reply = ''
+            reimbursement.save(update_fields=['status', 'accountant_reply'])
+            return Response({'message': '审批同意成功'})
+
+        if action == 'revoke':
+            _refund_budget(reimbursement.budget_item, Decimal(reimbursement.amount or '0'))
+            reimbursement.status = Reimbursement.STATUS_DRAFT
+            reimbursement.submitted_at = None
+            reimbursement.accountant_reply = ''
+            reimbursement.save(update_fields=['status', 'submitted_at', 'accountant_reply'])
+            return Response({'message': '审批撤回成功，已退回草稿'})
+
+        if action == 'reject':
+            reply = (request.data.get('reply') or '').strip()
+            if not reply:
+                return Response({'detail': '请填写拒绝原因或补充说明'}, status=status.HTTP_400_BAD_REQUEST)
+            _refund_budget(reimbursement.budget_item, Decimal(reimbursement.amount or '0'))
+            reimbursement.status = Reimbursement.STATUS_REJECTED
+            reimbursement.accountant_reply = reply
+            reimbursement.save(update_fields=['status', 'accountant_reply'])
+            return Response({'message': '已拒绝并完成回复'})
+
+        return Response({'detail': '不支持的审批动作'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class DashboardStatsView(APIView):
@@ -448,12 +659,33 @@ class ProjectBudgetTemplateView(APIView):
             lines = f.readlines()
 
         rows = _parse_budget_template_lines(lines)
+        item_names = [r['subject'] for r in rows if r.get('type') == 'item' and r.get('subject')]
+        quota_map = {q.item_name: q for q in BudgetQuota.objects.filter(item_name__in=item_names)}
+
+        for name in item_names:
+            if name not in quota_map:
+                quota_map[name] = _ensure_budget_quota(name)
+
+        for row in rows:
+            if row.get('type') != 'item':
+                continue
+            quota = quota_map.get(row.get('subject'))
+            if not quota:
+                continue
+            total = Decimal(quota.total_amount)
+            used = Decimal(quota.used_amount)
+            available = total - used
+            row['budget'] = float(total)
+            row['used'] = float(used)
+            row['available'] = float(available)
+            row['used_percent'] = float((used / total * 100) if total > 0 else 0)
         return Response({'rows': rows})
 
 
 class ReimbursementStatisticsView(APIView):
     def get(self, request):
         employee_id = request.query_params.get('employee_id')
+        valid_statuses = [Reimbursement.STATUS_SUBMITTED, Reimbursement.STATUS_APPROVED]
 
         personal_categories = [
             '硬件费', '材料费', '燃料动力费', '测试化验加工费', '外协费',
@@ -461,7 +693,7 @@ class ReimbursementStatisticsView(APIView):
         ]
 
         total_personal = (
-            Reimbursement.objects.filter(employee_id=employee_id, status=Reimbursement.STATUS_SUBMITTED)
+            Reimbursement.objects.filter(employee_id=employee_id, status__in=valid_statuses)
             .aggregate(total=Sum('amount'))
             .get('total')
             or Decimal('0')
@@ -483,7 +715,7 @@ class ReimbursementStatisticsView(APIView):
 
         department_map = {k: 0.0 for k in DEPARTMENT_OPTIONS}
         dept_rows = (
-            Reimbursement.objects.filter(status=Reimbursement.STATUS_SUBMITTED)
+            Reimbursement.objects.filter(status__in=valid_statuses)
             .values('department')
             .annotate(total=Sum('amount'))
         )

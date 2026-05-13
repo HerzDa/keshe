@@ -8,7 +8,7 @@ from .utils import amount_to_chinese_upper
 class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
-        fields = ['employee_no', 'name', 'department', 'phone', 'password']
+        fields = ['employee_no', 'name', 'department', 'role', 'phone', 'password']
 
     def validate_employee_no(self, value):
         if Employee.objects.filter(employee_no=value).exists():
@@ -68,19 +68,30 @@ class InvoiceSerializer(serializers.ModelSerializer):
 class ReimbursementSerializer(serializers.ModelSerializer):
     code_6 = serializers.CharField(write_only=True)
     employee_name = serializers.CharField(source='employee.name', read_only=True)
+    employee_department = serializers.CharField(source='employee.department', read_only=True)
     invoice_basic = serializers.SerializerMethodField(read_only=True)
+    status_label = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Reimbursement
         fields = [
-            'id', 'employee_name', 'code_6', 'department', 'reason', 'expense_type',
-            'reimbursement_date', 'remark', 'amount', 'amount_upper', 'status',
-            'submitted_at', 'created_at', 'invoice_basic'
+            'id', 'employee_name', 'employee_department', 'code_6', 'department', 'reason', 'budget_item', 'expense_type',
+            'reimbursement_date', 'remark', 'amount', 'amount_upper', 'accountant_reply', 'status',
+            'submitted_at', 'created_at', 'invoice_basic', 'status_label'
         ]
         read_only_fields = ['id', 'amount_upper', 'submitted_at', 'created_at', 'employee_name', 'invoice_basic']
 
+    def get_status_label(self, obj):
+        return dict(Reimbursement.STATUS_CHOICES).get(obj.status, obj.status)
+
     def get_invoice_basic(self, obj):
         inv = obj.invoice
+        req = self.context.get('request')
+        preview_url = ''
+        if inv.preview_image:
+            preview_url = req.build_absolute_uri(inv.preview_image.url) if req else inv.preview_image.url
+        elif inv.file:
+            preview_url = req.build_absolute_uri(inv.file.url) if req else inv.file.url
         return {
             'code_6': inv.code_6,
             'invoice_code': inv.invoice_code,
@@ -88,6 +99,8 @@ class ReimbursementSerializer(serializers.ModelSerializer):
             'invoice_date': inv.invoice_date,
             'total_amount': inv.total_amount,
             'buyer_name': inv.buyer_name,
+            'seller_name': inv.seller_name,
+            'preview_url': preview_url,
         }
 
     def validate(self, attrs):

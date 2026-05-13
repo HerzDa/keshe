@@ -1,5 +1,8 @@
 from django.urls import path
 from .views import (
+    AccountantReimbursementAuditView,
+    AccountantReimbursementHistoryListView,
+    AccountantReimbursementPendingListView,
     DashboardStatsView,
     EmployeeLookupView,
     LoginView,
@@ -9,6 +12,7 @@ from .views import (
     ProjectBudgetTemplateView,
     ReimbursementStatisticsView,
     RegisterView,
+    ReimbursementEditDeleteRevokeView,
     ReimbursementDraftOrSubmitView,
     TemporaryLoanDraftOrSubmitView,
     UploadAndVerifyInvoiceView,
@@ -25,6 +29,10 @@ urlpatterns = [
     path('reimbursement/save/', ReimbursementDraftOrSubmitView.as_view()),
     path('loan/save/', TemporaryLoanDraftOrSubmitView.as_view()),
     path('reimbursement/history/', MyReimbursementHistoryView.as_view()),
+    path('reimbursement/<int:reimbursement_id>/manage/', ReimbursementEditDeleteRevokeView.as_view()),
+    path('accountant/reimbursement/pending/', AccountantReimbursementPendingListView.as_view()),
+    path('accountant/reimbursement/history/', AccountantReimbursementHistoryListView.as_view()),
+    path('accountant/reimbursement/<int:reimbursement_id>/audit/', AccountantReimbursementAuditView.as_view()),
     path('dashboard/stats/', DashboardStatsView.as_view()),
     path('invoice/success-list/', VerifySuccessInvoiceListView.as_view()),
     path('budget/template/', ProjectBudgetTemplateView.as_view()),

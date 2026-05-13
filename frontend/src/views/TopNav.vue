@@ -14,7 +14,7 @@
       <el-menu-item index="/reimbursement" v-if="!isAccountant">报销申请</el-menu-item>
       <el-menu-item index="/budget" v-if="!isAccountant">项目预算</el-menu-item>
       <el-menu-item index="/history" v-if="!isAccountant">票据夹</el-menu-item>
-      <el-menu-item index="/statistics" v-if="!isAccountant">报销统计</el-menu-item>
+      <el-menu-item index="/statistics">报销统计</el-menu-item>
       <el-menu-item index="/accountant" v-if="isAccountant">审批中心</el-menu-item>
       <el-menu-item index="logout">退出登录</el-menu-item>
     </el-menu>

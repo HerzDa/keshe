@@ -16,6 +16,7 @@
 
       <el-table :data="list" border stripe>
         <el-table-column prop="employee_name" label="申请人" width="120" />
+        <el-table-column prop="employee_department" label="部门" width="120" />
         <el-table-column prop="budget_item" label="相关预算项" min-width="200" />
         <el-table-column prop="reason" label="摘要" min-width="220" />
         <el-table-column prop="amount" label="金额" width="110" />
@@ -41,6 +42,7 @@
 
       <el-table :data="historyList" border stripe>
         <el-table-column prop="employee_name" label="申请人" width="120" />
+        <el-table-column prop="employee_department" label="部门" width="120" />
         <el-table-column prop="budget_item" label="相关预算项" min-width="200" />
         <el-table-column prop="amount" label="金额" width="110" />
         <el-table-column prop="status_label" label="审批结果" width="130" />
@@ -57,6 +59,7 @@
       <div v-if="current">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="申请人">{{ current.employee_name }}</el-descriptions-item>
+          <el-descriptions-item label="部门">{{ current.employee_department || '-' }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ current.status_label }}</el-descriptions-item>
           <el-descriptions-item label="预算项">{{ current.budget_item || '-' }}</el-descriptions-item>
           <el-descriptions-item label="金额">{{ current.amount }}</el-descriptions-item>

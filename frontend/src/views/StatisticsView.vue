@@ -4,7 +4,7 @@
     <div class="header">
       <div>
         <h2>报销统计</h2>
-        <p>支持个人报销统计与部门报销统计可视化分析。</p>
+        <p>{{ isAccountant ? '支持部门报销统计可视化分析。' : '支持个人报销统计与部门报销统计可视化分析。' }}</p>
       </div>
       <el-segmented v-model="mode" :options="modeOptions" />
     </div>
@@ -27,11 +27,14 @@ import TopNav from './TopNav.vue'
 import request from '../api/request'
 
 const user = JSON.parse(localStorage.getItem('user') || '{}')
+const isAccountant = user.role === 'accountant'
 const mode = ref('personal')
-const modeOptions = [
-  { label: '个人报销统计', value: 'personal' },
-  { label: '部门报销统计', value: 'department' },
-]
+const modeOptions = isAccountant
+  ? [{ label: '部门报销统计', value: 'department' }]
+  : [
+      { label: '个人报销统计', value: 'personal' },
+      { label: '部门报销统计', value: 'department' },
+    ]
 
 const rawStats = ref({
   personal: { labels: [], values: [] },
@@ -102,6 +105,7 @@ watch(mode, () => {
 })
 
 onMounted(() => {
+  if (isAccountant) mode.value = 'department'
   loadStats()
   window.addEventListener('resize', renderCharts)
 })
